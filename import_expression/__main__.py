@@ -52,6 +52,8 @@ features = [getattr(__future__, fname) for fname in __future__.all_feature_names
 
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 
+return_code = 0
+
 class ImportExpressionCommandCompiler(codeop.CommandCompiler):
 	def __init__(self):
 		super().__init__()
