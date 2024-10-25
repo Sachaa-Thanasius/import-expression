@@ -309,4 +309,7 @@ def main():
 	ImportExpressionInteractiveConsole(repl_locals).interact(**interact_kwargs)
 
 if __name__ == '__main__':
+	if sys.version_info < (3, 10):
+		msg = "The import-expression interactive REPL is only supported on Python 3.10+."
+		raise RuntimeError(msg)
 	main()
