@@ -43,7 +43,11 @@ import tokenize
 import types
 import warnings
 from asyncio import futures
-from codeop import PyCF_DONT_IMPLY_DEDENT, PyCF_ALLOW_INCOMPLETE_INPUT
+
+try:
+	from codeop import PyCF_DONT_IMPLY_DEDENT, PyCF_ALLOW_INCOMPLETE_INPUT
+except ImportError:
+	raise RuntimeError('The import-expression interactive REPL is only supported on Python 3.10+.')
 
 import import_expression
 from import_expression import constants
@@ -309,7 +313,4 @@ def main():
 	ImportExpressionInteractiveConsole(repl_locals).interact(**interact_kwargs)
 
 if __name__ == '__main__':
-	if sys.version_info < (3, 10):
-		msg = "The import-expression interactive REPL is only supported on Python 3.10+."
-		raise RuntimeError(msg)
 	main()
