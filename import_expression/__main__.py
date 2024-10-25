@@ -72,12 +72,14 @@ class ImportExpressionCompile:
 	def __init__(self):
 		self.flags = PyCF_DONT_IMPLY_DEDENT | PyCF_ALLOW_INCOMPLETE_INPUT
 
-	def __call__(self, source, filename, symbol, **kwargs):
-		flags = self.flags
+	def __call__(self, source, filename, symbol, flags=0, **kwargs):
+		flags |= self.flags
 		if kwargs.get('incomplete_input', True) is False:
 			flags &= ~PyCF_DONT_IMPLY_DEDENT
 			flags &= ~PyCF_ALLOW_INCOMPLETE_INPUT
 		codeob = import_expression.compile(source, filename, symbol, flags, True)
+		if flags & ast.PyCF_ONLY_AST:
+			return codeob   # this is an ast.Module in this case
 		for feature in features:
 			if codeob.co_flags & feature.compiler_flag:
 				self.flags |= feature.compiler_flag
@@ -151,9 +153,10 @@ class ImportExpressionAsyncIOInteractiveConsole(ImportExpressionInteractiveConso
 				self.showtraceback()
 
 class REPLThread(threading.Thread):
-	def __init__(self, interact_kwargs):
-		self.interact_kwargs = interact_kwargs
+	def __init__(self, interact_kwargs, prelude_path: str | None):
 		super().__init__()
+		self.interact_kwargs = interact_kwargs
+		self.prelude_path = prelude_path
 
 	def run(self):
 		try:
@@ -161,6 +164,21 @@ class REPLThread(threading.Thread):
 				with tokenize.open(startup_path) as f:
 					startup_code = compile(f.read(), startup_path, "exec")
 					exec(startup_code, console.locals)
+
+			if self.prelude_path is not None:
+				while not loop.is_running():
+					pass
+
+				with tokenize.open(self.prelude_path) as f:
+					prelude_source = f.read()
+
+				prelude_code = import_expression.compile(
+					prelude_source,
+					self.prelude_path,
+					'exec',
+					PyCF_ALLOW_TOP_LEVEL_AWAIT
+				)
+				console.runcode(prelude_code)
 
 			console.interact(**self.interact_kwargs)
 		finally:
@@ -198,7 +216,7 @@ class ImportExpressionCompleter(rlcompleter.Completer):
 		self.namespace = old_namespace
 		return res
 
-def asyncio_main(repl_locals, interact_kwargs):
+def asyncio_main(repl_locals, interact_kwargs, prelude_path: str | None):
 	global console
 	global loop
 	global repl_future
@@ -212,7 +230,7 @@ def asyncio_main(repl_locals, interact_kwargs):
 	repl_future = None
 	repl_future_interrupted = False
 
-	repl_thread = REPLThread(interact_kwargs)
+	repl_thread = REPLThread(interact_kwargs, prelude_path)
 	repl_thread.daemon = True
 	repl_thread.start()
 
@@ -286,20 +304,12 @@ def main():
 	args = parse_args()
 
 	if args.filename:
-		with open(args.filename) as f:
-			flags = 0
-			if args.asyncio:
-				flags |= PyCF_ALLOW_TOP_LEVEL_AWAIT
-			prelude = import_expression.compile(f.read(), flags=flags)
-		if args.asyncio:
-			prelude_result = eval(prelude, repl_locals)
-			# if there are no top level awaits in the code, eval will not return a coroutine
-			if inspect.isawaitable(prelude_result):
-				# we need a new loop because using asyncio.run here breaks the console
-				loop = asyncio.new_event_loop()
-				loop.run_until_complete(prelude_result)
-		else:
-			import_expression.exec(prelude, globals=repl_locals)
+		if not args.asyncio:
+			with open(args.filename) as f:
+				prelude_source = f.read()
+			codeobj = import_expression.compile(prelude_source, args.filename)
+			import_expression.exec(codeobj, globals=repl_locals)
+
 		if not args.interactive:
 			sys.exit(0)
 
@@ -308,7 +318,7 @@ def main():
 	interact_kwargs = dict(banner='' if args.quiet else None, exitmsg='' if args.quiet else None)
 
 	if args.asyncio:
-		sys.exit(asyncio_main(repl_locals, interact_kwargs))
+		sys.exit(asyncio_main(repl_locals, interact_kwargs, args.filename or None))
 
 	ImportExpressionInteractiveConsole(repl_locals).interact(**interact_kwargs)
 
