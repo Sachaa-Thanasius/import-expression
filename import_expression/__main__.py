@@ -166,8 +166,8 @@ class REPLThread(threading.Thread):
 					exec(startup_code, console.locals)
 
 			if self.prelude_path is not None:
-				while not loop.is_running():
-					pass
+				# ensure loop is running
+				asyncio.run_coroutine_threadsafe(asyncio.sleep(0), loop).result()
 
 				with tokenize.open(self.prelude_path) as f:
 					prelude_source = f.read()
