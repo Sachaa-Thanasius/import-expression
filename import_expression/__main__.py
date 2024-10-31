@@ -294,12 +294,14 @@ def main():
 
 	repl_locals = {
 		key: globals()[key] for key in [
-			'__name__', '__package__',
-			'__loader__', '__spec__',
-			'__builtins__', '__file__'
+			'__package__', '__loader__',
+			'__spec__', '__builtins__',
+			'__file__',
 		]
 		if key in globals()
 	}
+
+	repl_locals['__name__'] = '__main__'
 
 	args = parse_args()
 
